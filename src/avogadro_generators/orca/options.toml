@@ -1,6 +1,6 @@
 # This file was automatically generated, do NOT modify manually!
 
-tabs = ["Basic", "SCF", "Basis", "Electric Properties"]
+tabs = ["Basic", "SCF", "Basis", "Electric Properties", "Excited States"]
 
 ["Title"]
 label = "Title"
@@ -204,7 +204,7 @@ tab = "Basic"
 label = "Use Symmetry"
 type = "boolean"
 default = false
-toolTip = "Add UseSym keyword."
+toolTip = "Emit the UseSym simple keyword."
 order = 4
 tab = "Basic"
 
@@ -215,6 +215,36 @@ default = ""
 toolTip = "Comma- or whitespace-separated list of simple input keywords."
 order = 5
 tab = "Basic"
+
+["excited_state_method"]
+label = "Excited State Method"
+type = "stringList"
+default = 0
+values = [
+    "None",
+    "CIS",
+    "CIS(D)",
+    "TDDFT",
+    "EOM-CCSD",
+]
+order = 0
+tab = "Excited States"
+
+["excited_num_states"]
+label = "Number of States"
+type = "integer"
+default = 3
+minimum = 1
+order = 1
+tab = "Excited States"
+
+["excited_target_state"]
+label = "Target State"
+type = "integer"
+default = 1
+minimum = 1
+order = 2
+tab = "Excited States"
 
 [Basis_pople]
 label = "Pople Basis Set"

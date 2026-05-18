@@ -75,6 +75,9 @@ def generateInputFile(input_json: dict) -> tuple[str, list[str], list[str]]:
     nprocs: int         = opts["Processor Cores"]
     max_mem: int        = opts["Memory"]
     extra_keywords: str = opts["basic_simple_keywords"]
+    excited_method: str = opts["excited_state_method"]
+    excited_nroots: int = opts["excited_num_states"]
+    excited_iroot: int  = opts["excited_target_state"]
 
     # Extract defined options
     run_type        = RunType(opts["Calculation Type"])
@@ -117,7 +120,14 @@ def generateInputFile(input_json: dict) -> tuple[str, list[str], list[str]]:
                     f"Element {element.symbol} is not defined for the {basis_set.value} basis set!"
                 )
 
-    if isinstance(method, Functionals):
+    if excited_method in ("CIS", "CIS(D)"):
+        method = "HF"
+
+    if excited_method == "EOM-CCSD":
+        simple_keywords.extend(["EOM-CCSD", basis_set])
+        if auxc_basis is not None:
+            simple_keywords.append(auxc_basis)
+    elif isinstance(method, Functionals):
         if disp == "":
             simple_keywords.extend([method.value, basis_set])
         elif Disp[disp] not in method.disp:
@@ -153,6 +163,9 @@ def generateInputFile(input_json: dict) -> tuple[str, list[str], list[str]]:
 
     if auxjk_basis is not None:
         simple_keywords.append(auxjk_basis)
+
+    if excited_method == "CIS(D)" and auxc_basis is None:
+        simple_keywords.append("AutoAux")
 
     if solvent != "":
         solvent = Solvent(solvent)
@@ -307,6 +320,20 @@ def generateInputFile(input_json: dict) -> tuple[str, list[str], list[str]]:
         generated_input += "%elprop\n"
         for item in elprop_block:
             generated_input += item
+        generated_input += "end\n"
+
+    if excited_method != "None":
+        excited_block_name = {
+            "CIS": "cis",
+            "CIS(D)": "cis",
+            "TDDFT": "tddft",
+            "EOM-CCSD": "mdci",
+        }[excited_method]
+        generated_input += f"%{excited_block_name}\n"
+        generated_input += f"    nroots = {excited_nroots}\n"
+        generated_input += f"    iroot = {excited_iroot}\n"
+        if excited_method == "CIS(D)":
+            generated_input += "    dcorr = 1\n"
         generated_input += "end\n"
 
     generated_input += f"* xyz {charge} {multiplicity}\n"

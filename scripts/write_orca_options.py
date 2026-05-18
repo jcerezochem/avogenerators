@@ -88,8 +88,53 @@ class BasicOption:
     maximum: int | float | None = None
 
 
-class BasicTab:
-    """Class for writing the Basic tab"""
+class ManualTab:
+    """Base class for writing manual tabs."""
+
+    name = ""
+    inputs = {}
+
+    @classmethod
+    def write_tab(cls) -> str:
+        """Write the ``options.toml`` entry for this tab."""
+
+        tab = ""
+        for key, val in cls.inputs.items():
+            tab += f'["{key}"]\n'
+            tab += f'label = "{val.label}"\n'
+            tab += f'type = "{val.dtype}"\n'
+            if val.dtype == "string":
+                tab += f'default = "{val.default}"\n'
+            elif val.dtype == "boolean":
+                tab += f"default = {str(val.default).lower()}\n"
+            else:
+                tab += f"default = {val.default}\n"
+
+            if val.options is not None:
+                tab += "values = [\n"
+                for option in val.options:
+                    tab += f'    "{option}",\n'
+                tab += "]\n"
+
+            if val.minimum is not None:
+                tab += f"minimum = {val.minimum}\n"
+
+            if val.maximum is not None:
+                tab += f"maximum = {val.maximum}\n"
+
+            if val.toolTip is not None:
+                tab += f'toolTip = "{val.toolTip}"\n'
+
+            if val.order is not None:
+                tab += f"order = {val.order}\n"
+
+            tab += f'tab = "{cls.name}"\n\n'
+
+        return tab
+
+
+class BasicTab(ManualTab):
+    """Class for writing the Basic tab."""
 
     name = "Basic"
     # fmt: off
@@ -293,45 +338,41 @@ class BasicTab:
         ),
     }
     # fmt: on
-    @classmethod
-    def write_tab(cls) -> str:
-        """Write the ``options.toml`` entry for this tab."""
+class ExcitedStatesTab(ManualTab):
+    """Class for writing the Excited States tab."""
 
-        tab = ""
-        for key, val in cls.inputs.items():
-            tab += f'["{key}"]\n'
-            tab += f'label = "{val.label}"\n'
-            tab += f'type = "{val.dtype}"\n'
-            if val.dtype == "string":
-                tab += f'default = "{val.default}"\n'
-            elif val.dtype == "boolean":
-                tab += f"default = {str(val.default).lower()}\n"
-            else:
-                tab += f"default = {val.default}\n"
-
-            if val.options is not None:
-                tab += "values = [\n"
-                for option in val.options:
-                    tab += f'    "{option}",\n'
-                tab += "]\n"
-
-            if val.minimum is not None:
-                tab += f"minimum = {val.minimum}\n"
-
-            if val.maximum is not None:
-                tab += f"maximum = {val.maximum}\n"
-
-            if val.toolTip is not None:
-                tab += f'toolTip = "{val.toolTip}"\n'
-
-            if val.order is not None:
-                tab += f"order = {val.order}\n"
-
-            tab += f'tab = "{cls.name}"\n\n'
-
-        return tab
-
-
+    name = "Excited States"
+    # fmt: off
+    inputs = {
+        "excited_state_method": BasicOption(
+            dtype="stringList",
+            default=0,  # None
+            label="Excited State Method",
+            options=(
+                "None",
+                "CIS",
+                "CIS(D)",
+                "TDDFT",
+                "EOM-CCSD",
+            ),
+            order=0,
+        ),
+        "excited_num_states": BasicOption(
+            dtype="integer",
+            default=3,
+            label="Number of States",
+            minimum=1,
+            order=1,
+        ),
+        "excited_target_state": BasicOption(
+            dtype="integer",
+            default=1,
+            label="Target State",
+            minimum=1,
+            order=2,
+        ),
+    }
+    # fmt: on
 def write_block_tab(block_enum, tab_name: str, extras: dict) -> str:
     """Write the ``options.toml`` entry for an input block."""
     tab = ""
@@ -444,6 +485,8 @@ tabs = {
     },
 }
 
+manual_tabs = [BasicTab]
+
 if __name__ == "__main__":
     orca_toml = (
         Path(__file__).parent.parent / "src/avogadro_generators/orca/options.toml"
@@ -451,12 +494,15 @@ if __name__ == "__main__":
 
     toml = "# This file was automatically generated, do NOT modify manually!\n\n"
 
-    toml += f'tabs = ["{BasicTab.name}"'
+    toml += f'tabs = ["{manual_tabs[0].name}"'
     for info in tabs.values():
         toml += f', "{info["name"]}"'
+    toml += f', "{ExcitedStatesTab.name}"'
     toml += "]\n\n"
 
-    toml += BasicTab.write_tab()
+    for tab in manual_tabs:
+        toml += tab.write_tab()
+    toml += ExcitedStatesTab.write_tab()
 
     for key, opt in custom_opts.items():
         toml += f"[{key}]\n"

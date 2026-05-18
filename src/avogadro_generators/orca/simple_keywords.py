@@ -99,6 +99,12 @@ class Symmetry(StrEnum):
     USESYM = "UseSym"
 
 
+class BasisKeyword(StrEnum):
+    """Control of basis-related simple keywords."""
+
+    AUTOAUX = "AutoAux"
+
+
 class Grid(StrEnum):
     """Control of Numerical Integration Grids."""
 
@@ -164,6 +170,7 @@ def match_simple_keyword(kwd: str):
         Opt,
         Output,
         Symmetry,
+        BasisKeyword,
         Grid,
         RIApproximation,
         PartialCharges,
