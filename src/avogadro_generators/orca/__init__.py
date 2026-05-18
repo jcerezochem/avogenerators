@@ -29,6 +29,64 @@ from .implicit_solvation import Solvent, SolvationModel
 from ..utilities import Element
 
 
+def _constraint_tag_and_atoms(atoms: list[int]) -> tuple[str, list[int]] | None:
+    """Map a CJSON atom list to an ORCA internal coordinate type."""
+    tag_map = {2: "B", 3: "A", 4: "D"}
+    tag = tag_map.get(len(atoms))
+    if tag is None:
+        return None
+    return tag, atoms
+
+
+def _parse_constraint_entry(constraint: list | dict) -> tuple[str, list[int], float, dict | None] | None:
+    """Normalize a constraint entry from legacy or scan-aware CJSON."""
+    if isinstance(constraint, list):
+        if len(constraint) < 3:
+            return None
+        value, *atoms = constraint
+        parsed = _constraint_tag_and_atoms(atoms)
+        if parsed is None:
+            return None
+        tag, atoms = parsed
+        return tag, atoms, float(value), None
+
+    if isinstance(constraint, dict):
+        value = constraint.get("value")
+        atoms = constraint.get("atoms")
+        if value is None or not isinstance(atoms, list):
+            return None
+        parsed = _constraint_tag_and_atoms(atoms)
+        if parsed is None:
+            return None
+        tag, atoms = parsed
+        scan = constraint.get("scan")
+        if not isinstance(scan, dict):
+            scan = None
+        return tag, atoms, float(value), scan
+
+    return None
+
+
+def _format_constraint_entry(tag: str, atoms: list[int], value: float) -> str:
+    atom_str = " ".join(str(atom) for atom in atoms)
+    return f"{{ {tag} {atom_str} {value:.6f} C }} "
+
+
+def _format_scan_entry(tag: str, atoms: list[int], scan: dict) -> str | None:
+    initial = scan.get("initial")
+    end = scan.get("end")
+    steps = scan.get("steps")
+    if not isinstance(initial, (int, float)):
+        return None
+    if not isinstance(end, (int, float)):
+        return None
+    if not isinstance(steps, int) or steps < 2:
+        return None
+
+    atom_str = " ".join(str(atom) for atom in atoms)
+    return f"{tag} {atom_str} = {float(initial):.6f}, {float(end):.6f}, {steps}"
+
+
 def write_block(block_name: str, keys_vals: dict):
     """Write an input block."""
     block = f"%{block_name}\n"
@@ -218,34 +276,44 @@ def generateInputFile(input_json: dict) -> tuple[str, list[str], list[str]]:
         and ("constraints" in cjson or "frozen" in cjson)
     ):
         # check for constraints and frozen atoms in cjson
-        generated_input += "%geom\n"
-        generated_input += "    Constraints \n"
+        constraint_lines = []
+        scan_lines = []
 
         # look for bond, angle, torsion constraints
         if "constraints" in cjson:
-            # loop through the output
-            # e.g. "{ B N1 N2 value C }"
             for constraint in cjson["constraints"]:
-                generated_input += " " * 8  # Add indentation
-                if len(constraint) == 3:
-                    # distance
-                    value, atom1, atom2 = constraint
-                    generated_input += f"{{ B {atom1} {atom2} {value:.6f} C }} \n"
-                if len(constraint) == 4:
-                    # angle
-                    value, atom1, atom2, atom3 = constraint
-                    generated_input += (
-                        f"{{ A {atom1} {atom2} {atom3} {value:.6f} C }} \n"
-                    )
-                if len(constraint) == 5:
-                    # torsion / dihedral
-                    value, atom1, atom2, atom3, atom4 = constraint
-                    generated_input += (
-                        f"{{ D {atom1} {atom2} {atom3} {atom4} {value:.6f} C }} \n"
-                    )
+                parsed = _parse_constraint_entry(constraint)
+                if parsed is None:
+                    continue
+
+                tag, atoms, value, scan = parsed
+                if scan is None:
+                    constraint_lines.append(_format_constraint_entry(tag, atoms, value))
+                    continue
+
+                scan_line = _format_scan_entry(tag, atoms, scan)
+                if scan_line is None:
+                    constraint_lines.append(_format_constraint_entry(tag, atoms, value))
+                else:
+                    scan_lines.append(scan_line)
+
+        generated_input += "%geom\n"
+        if constraint_lines:
+            generated_input += "    Constraints \n"
+            for line in constraint_lines:
+                generated_input += f"        {line}\n"
+            generated_input += "    end\n"
+
+        if scan_lines:
+            generated_input += "    Scan\n"
+            for line in scan_lines:
+                generated_input += f"        {line}\n"
+            generated_input += "    end\n"
 
         # look for frozen atoms
         if "frozen" in cjson["atoms"]:
+            if not constraint_lines:
+                generated_input += "    Constraints \n"
             # two possibilities - same number of atoms
             # or .. 3*number of atoms
             frozen = cjson["atoms"]["frozen"]
@@ -265,7 +333,7 @@ def generateInputFile(input_json: dict) -> tuple[str, list[str], list[str]]:
                     if frozen[i + 2] == 0:
                         generated_input += f"{' ' * 8}{{ Z {i} C }} \n"
 
-        generated_input += "    end\n"
+            generated_input += "    end\n"
         generated_input += "end\n"
 
     scf_block = []
